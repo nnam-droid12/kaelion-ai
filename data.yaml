@@ -1,0 +1,7 @@
+train: datasets-for-local-training/train/images
+val: datasets-for-local-training/valid/images
+test: datasets-for-local-training/test/images
+
+nc: 1
+names: ['Urine Dipstick Test Strip']
+
