@@ -12,44 +12,45 @@ export default function StripAnalyzer({ onResult }) {
   // --------------------------
  useEffect(() => {
  const loadModel = async () => {
-try {
-await new Promise((resolve, reject) => {
-const script = document.createElement("script");
-script.src = "/ei-wasm/edge-impulse-standalone.js";
- 
-script.onload = () => {
-if (window.EdgeImpulse && window.EdgeImpulse.load) {
-resolve();
-} else {
-console.warn("EdgeImpulse global not immediately available after script load.");
-resolve(); 
-}
-};
-script.onerror = reject;
-document.body.appendChild(script);
-});
+ try {
 
-if (!window.EdgeImpulse || !window.EdgeImpulse.load) {
- throw new Error("window.EdgeImpulse not found after script load.");
+ await new Promise((resolve, reject) => {
+ const script = document.createElement("script");
+ script.src = "/ei-wasm/edge-impulse-standalone.js";
+ script.onerror = reject;
+
+ script.onload = () => {
+
+ const checkEI = () => {
+ if (window.EdgeImpulse && window.EdgeImpulse.load) {
+
+ resolve(); 
+ } else {
+
+ setTimeout(checkEI, 50); 
  }
- 
+ };
+
+ checkEI(); 
+ };
+
+ document.body.appendChild(script);
+ });
 
  const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
  const r = await mod.createRunner();
  await r.init();
 
  setRunner(r);
- 
-} catch (e) {
-console.error("EI Load Error:", e);
 
-setIsLoading(false); 
-}
+ } catch (e) {
+ console.error("EI Load Error (FINAL):", e);
+ setIsLoading(false); 
+ }
 };
 
- loadModel();
-}, []); 
-
+loadModel();
+}, []);
   // --------------------------
   // Start Camera
   // --------------------------
