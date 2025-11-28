@@ -1,0 +1,10 @@
+{
+  "headers": [
+    {
+      "source": "/ei-wasm/(.*)",
+      "headers": [
+        { "key": "Content-Type", "value": "application/wasm" }
+      ]
+    }
+  ]
+}
