@@ -4,9 +4,6 @@
 
 ---
 
-## project public link: 
-[View the project on Edge Impulse](https://studio.edgeimpulse.com/public/821834/latest)
-
 
 ## Github Repository: 
 [Github Repository](https://github.com/nnam-droid12/kaelion-ai)
@@ -19,11 +16,12 @@
 4. [Dataset and Data Curation](#dataset-and-data-curation)
 5. [Pipeline (Impulse) Design](#pipeline-impulse-design)
 6. [Model Training and Parameters](#model-training-and-parameters)
-7. [Testing and Evaluation](#testing-and-evaluation)
-8. [Deployment and Real-World Inference](#deployment-and-real-world-inference)
-9. [Results](#results)
-10. [Challenges and Future Work](#challenges-and-future-work)
-11. [Repository and References](#repository-and-references)
+7. [Experiments](#experiments)
+8. [Testing and Evaluation](#testing-and-evaluation)
+9. [Deployment and Real-World Inference](#deployment-and-real-world-inference)
+10. [Results](#results)
+11. [Challenges and Future Work](#challenges-and-future-work)
+12. [Repository and References](#repository-and-references)
 
 ---
 
@@ -59,12 +57,19 @@ The dataset was curated from **real-world urine test strips** and **reference ch
 
 We captured 1156 images of the urine stripes and reference charts using samsung phone camera and iphone camera and uploaded them to Edge Impulse Studio.
 
+An example of the phone camera we used in capturing our data of urine test stripe and reference chart.
 
+EXAMPLE OF IPHONE 12 PHONE USED
+![iphone-image2.jpeg](https://usercdn.edgeimpulse.com/project821834/b5768330683ebb5518c79609c473055053db1fc8b4cd8a23e26887a30ccb1283)
+
+EXAMPLE OF SAMSUNG PHONE USED
+![samsung-image.jpeg](https://usercdn.edgeimpulse.com/project821834/edecd5e033f05c6a8576a29dd99bc080456d3ab38c9dfc78e6ba23778c25a185)
+
+
+SAMPLE OF THE DATA UPLOADED TO EDGE IMPULSE STUDIO
 
 ![image of data upload to edge impulse studio](https://usercdn.edgeimpulse.com/project821834/de5670ff07857b98a269516e56f7a0bb2d7abf8d1eb4d69d906f73cd48e7f087)
 
-
-![image two of data upload to edge impulse studio](https://usercdn.edgeimpulse.com/project821834/2f4ab9548fad220e95865778c9db302ce08a368f45583880d2cf721adf188270)
 
 ![image three of data upload to edge impulse studio](https://usercdn.edgeimpulse.com/project821834/78e6eba7c95fed112f909f7d75c1b6d4066151c7dd983385c29d755b6a69c98e)
 
@@ -92,11 +97,10 @@ We also made use of Edge impulse AI labeling queue to speed up workflow, as demo
 
 
 
-
 | Dataset Attribute | Description |
 |--------------------|-------------|
 | **Total Images** | 1,000+ images |
-| **Classes** | `Urine_Strip`, `reference_chart` |
+| **Classes** | `Urine_Stripe`, `reference_chart` |
 | **Image Sources** | Real dipstick tests from phone camera |
 | **Resolution** | 320×320 pixels |
 | **Annotations** | Bounding boxes using Edge Impulse data acquisition tool |
@@ -106,13 +110,13 @@ We also made use of Edge impulse AI labeling queue to speed up workflow, as demo
 
 ### Data Quality Considerations
 - Images captured in varying **lighting conditions** (natural, fluorescent, LED)
-- Different **camera types** (smartphones such as samsung, iphones, webcams)
+- Different **camera types** (smartphones such as samsung, iphones)
 - Ensured balance between positive and negative examples
 - Labeled all samples as `"Urine__Strip" and "reference_chart"`
 
 ---
 
-## ⚙ Pipeline (Impulse) Design
+## Pipeline (Impulse) Design
 
 The **Edge Impulse pipeline** was constructed with the following key blocks:
 
@@ -120,14 +124,10 @@ The **Edge Impulse pipeline** was constructed with the following key blocks:
 |--------|-----------|
 | **Image Data Block** | Handles preprocessing (resize 320x320) |
 
-![create-impulse-image.PNG](https://usercdn.edgeimpulse.com/project821834/3e7f55de0ba1bfcfff43913561df4d2c07ae40cf4bf06231584f95fb0a621e2c)
-
 | **YOLO-Pro (Developer Preview)** | Performs object detection |
 
-![choose-model-for-training-image-3.PNG](https://usercdn.edgeimpulse.com/project821834/41f105ea827b549fd0c99d5da36dc763ae990b033890f74ee41c763604e2bdb0)
-
-
 | **Color Feature Extraction (Custom)** | Extracts average HSV and LAB color features from detected strip regions |
+
 | **Classification Head** | Maps color differences to diagnostic outcomes |
 
 ### Why These Blocks?
@@ -142,29 +142,81 @@ The **Edge Impulse pipeline** was constructed with the following key blocks:
 
 Training was performed on **Edge Impulse Studio** using the GPU processor.
 
+To create an Impulse, I follow these steps:
+- Go to the Impulse Design section, then select the Create Impulse page. We have opted for a 320x320 pixel image size in the “Image Data” form fields to achieve better accuracy.
+- Click on “Add a processing block” and choose “Image”. This step will pre-process and normalize the image data while also giving us the option to choose the color depth.
+- Click on “Add a learning block” and choose “Object Detection (Images)”.
+- Finally,  I click on the “Save Impulse” button to complete the process.
+
+
+![create-impulse-image.PNG](https://usercdn.edgeimpulse.com/project821834/d012236577770d8dc0619a2f06344510dbf43c4ce7320b71a60d062daeca5f24)
+
+
+On the Image page, I choose RGB as color depth and click on the Save parameters button. The page will be redirected to the Generate Features page.
+
+![create-image-page-1.PNG](https://usercdn.edgeimpulse.com/project821834/26a8c14e66e4007d8e2907706ccf1bd032e63f0c8c07d159e5b3b17ba2840218)
+
+
+Now we can initiate feature generation by clicking on the Generate features button. Once the feature generation is completed, the data visualization will be visible in the Feature Explorer panel.
+
+
+![generate-feature-image-1.PNG](https://usercdn.edgeimpulse.com/project821834/576ea06fe51f339c540b380fbea8958c04d1c060ed5084a2bfb9d0d169b78823)
+
+
+![generate-feature-image-2.PNG](https://usercdn.edgeimpulse.com/project821834/fbc31066c7893d8e2f031d21c1ba39b830a12845b9895501b228bacc0bd1d9d2)
+
+
+Go to the Object Detection page, then click “Choose a different model” and select the YOLO preview model. There are 4 variations of the model size available, and we selected the Nano version with 2.4 million parameters. Afterward, click the “Start training” button. The training process will take a few minutes to complete.
+
+![choose-model-for-training-image.PNG](https://usercdn.edgeimpulse.com/project821834/a47d4b276e7451eb0362d28578e34e47769b73552f2ccc25a4d5cf861a6619e9)
+
+
+![choose-model-for-training-image-2.PNG](https://usercdn.edgeimpulse.com/project821834/023717c525683b950e6843c055cde11506fd3b299dc0f68c4646220aad8f51c4)
+
+
+![choose-model-for-training-image-3.PNG](https://usercdn.edgeimpulse.com/project821834/c7bc1db94fa60ebc6ed17c0675d4ceb33ea95a84406bfc5b696df618db07c77b)
+
+
+Once the training is completed we can see the precision score and metrics as shown below.
+
+![model-output.PNG](https://usercdn.edgeimpulse.com/project821834/009e3443586721f328708868b691c12f79f1542783f60a22e46d54ff7d016b78)
+
+
 | Parameter | Value | Reason |
 |------------|--------|--------|
-| **Epochs** | 50 | Balanced between compute time and performance |
+| **Epochs** | 60 | Balanced between compute time and performance |
 | **Learning Rate** | 0.001 | Prevents overfitting on limited dataset |
-| **Batch Size** | 16 | Fits GPU memory constraints |
-| **Model Architecture** | YOLO-Pro (Nano) | Optimized for embedded edge inference |
+| **Batch Size** | 32 | Fits GPU memory constraints |
+| **Model Architecture** | YOLO-Pro (developer preview) | Optimized for embedded edge inference |
 | **Pretrained Weights** | ✅ Yes | Improved convergence speed |
 | **Validation Split** | 20% | Ensures reliable evaluation |
 
-### Training Log (Excerpt)
+
+---
+
+##  Experiments
+
+Urine dipstick tests are one of the simplest and most cost-effective diagnostic tools used in medical labs and at home.
 
 
 ---
 
 ##  Testing and Evaluation
 
+On the Model testing page, click on the “Classify All” button which will initiate model testing with the trained float32 model. The testing accuracy is 55.02%.
+
+
+![model-testing-2.PNG](https://usercdn.edgeimpulse.com/project821834/de8b86f94fa6e6cc164e298f35677d09cb43fd55de37fd9be546f9bfcbf1d977)
+
+![model-testing-3.PNG](https://usercdn.edgeimpulse.com/project821834/5680f9f7d04357663f59d7ee1597a69e198bf59c6b8933de368657303010c72a)
+
 The trained model achieved the following results:
 
 | Metric | Score |
 |---------|--------|
-| **Precision** | 0.87 |
-| **Recall** | 0.64 |
-| **F1 score** | 0.74 |
+| **Precision** | 0.88 |
+| **Recall** | 0.56 |
+| **F1 score** | 0.68 |
 
 Sample Detection Output:
 
@@ -178,8 +230,21 @@ Color Comparison Visualization:
 
 ##  Deployment and Real-World Inference
 
-The model was deployed using the **Edge Impulse “Bring Your Own Model (BYOM)”** workflow.  
-It runs efficiently on a **Raspberry Pi 4** with real-time camera inference.
+Go to Deployment page on edge impulse Linux and choose selected deployment as shown in the image below
+
+![model-deployment-2.PNG](https://usercdn.edgeimpulse.com/project821834/18f3d475fa4108dcbad896443967bef17b64b13bddee3adc0616624a4b9eb87c)
+
+In the model optimization section
+Select:
+
+Unoptimized (float32) - Highest accuracy - recommended for medical-style tasks
+
+![model-deployment-3.PNG](https://usercdn.edgeimpulse.com/project821834/353163acd69ec9e9271918fca37289594afd8bde9a4e31a4a02045ec1e7a2318)
+
+1. Click Build and wait for the process to complete.
+2. Download the file: klion-ai-linux-x86_64-v3.eim
+
+![model-deployment-4.PNG](https://usercdn.edgeimpulse.com/project821834/208f902b6143529be70989a6cfb5935fb74b0df2772b0dc1bf1576caed9092fa)
 
 **Inference Flow:**
 1. Detect urine test strip using YOLO.
@@ -197,23 +262,16 @@ It runs efficiently on a **Raspberry Pi 4** with real-time camera inference.
 | Parameter | Value |
 |------------|--------|
 | **Average Inference Time** | 250 ms/frame |
-| **Model Size** | 2.4 MB |
+| **Model Size** | 10.1 MB |
 | **Accuracy (Diagnosis Matching)** | ~88% (in preliminary tests) |
 | **Edge Device** | Raspberry Pi 4B + Pi Camera |
 
-<p align="center">
-  <video width="700" controls>
-    <source src="assets/demo_video.mp4" type="video/mp4">
-    Your browser does not support HTML5 video.
-  </video>
-</p>
 
 ---
 
 ##  Challenges and Future Work
 
 ### Challenges
-- Limited dataset variety in lighting and background.
 - Variations in color perception between different camera sensors.
 - Reducing false positives in test strip boundary detection.
 
@@ -228,7 +286,6 @@ It runs efficiently on a **Raspberry Pi 4** with real-time camera inference.
 ##  Repository and References
 
 -  **GitHub Repository:** [Kaelion AI](https://github.com/nnam-droid12/kaelion-ai)
--  **Edge Impulse Project:** *To be added once finalized*
 
 ---
 
@@ -238,5 +295,5 @@ Special thanks to the **Edge Impulse team** for organizing the **Global Edge AI 
 
 ---
 
-> _“Innovation happens when we bridge the gap between simplicity and intelligence.” — William Nnamani_
+> _“Innovation happens when we bridge the gap between simplicity and intelligence.”
 
