@@ -26,13 +26,13 @@ ANALYTE_ORDER = [
 DIAGNOSIS_TEXT = {
     "Leukocytes": "UTI / urinary tract inflammation (leukocytes present)",
     "Nitrites": "Bacteriuria - indicative of urinary tract infection (nitrites positive)",
-    "Urobilinogen": "Elevated urobilinogen - possible liver disease or hemolysis",
-    "Protein": "Proteinuria - possible kidney damage or disease",
+    "Urobilinogen": "Elevated urobilinogen -  liver disease or hemolysis",
+    "Protein": "Proteinuria -  kidney damage or disease",
     "pH": "Abnormal urinary pH - acid-base imbalance",
-    "Blood": "Hematuria - blood in urine (possible kidney/urinary tract bleeding)",
+    "Blood": "Hematuria - blood in urine ( kidney/urinary tract bleeding)",
     "SpecificGravity": "Abnormal urine concentration - check hydration or kidney function",
     "Ketone": "Ketones present - abnormal fat metabolism (check for diabetes/ketoacidosis)",
-    "Bilirubin": "Bilirubin present - possible liver dysfunction or bile duct problem",
+    "Bilirubin": "Bilirubin present - liver dysfunction or bile duct problem",
     "Glucose": "Glucosuria - elevated urinary glucose (suggestive of diabetes)"
 }
 

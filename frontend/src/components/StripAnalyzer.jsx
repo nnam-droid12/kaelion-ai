@@ -8,108 +8,105 @@ export default function StripAnalyzer({ onResult }) {
   const backendURL = "https://kaelion-ai.onrender.com/analyze";
 
   // --------------------------
-  // Load Edge Impulse Model
-  // --------------------------
- useEffect(() => {
- const loadModel = async () => {
- try {
-
- await new Promise((resolve, reject) => {
- const script = document.createElement("script");
- script.src = "/ei-wasm/edge-impulse-standalone.js";
- script.onerror = reject;
-
- script.onload = () => {
-
- const checkEI = () => {
- if (window.EdgeImpulse && window.EdgeImpulse.load) {
-
- resolve(); 
- } else {
-
- setTimeout(checkEI, 50); 
- }
- };
-
- checkEI(); 
- };
-
- document.body.appendChild(script);
- });
-
- const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
- const r = await mod.createRunner();
- await r.init();
-
- setRunner(r);
-
- } catch (e) {
- console.error("EI Load Error (FINAL):", e);
- setIsLoading(false); 
- }
-};
-
-loadModel();
-}, []);
-  // --------------------------
-  // Start Camera
+  // 1. Initialize Edge Impulse
   // --------------------------
   useEffect(() => {
- if (!runner) return;
+    const initModel = async () => {
+    
+      if (!window.EdgeImpulse) {
+        console.error("Edge Impulse script not loaded in index.html");
+        return;
+      }
 
- const startCamera = async () => {
- try {
+      try {
+      
+        const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
+        const r = await mod.createRunner();
+        await r.init();
+        
+        console.log("Model loaded successfully");
+        setRunner(r);
+      } catch (e) {
+        console.error("EI Init Error:", e);
+      }
+    };
 
- const stream = await navigator.mediaDevices.getUserMedia({
- video: { facingMode: "environment" },
- audio: false,
- });
- 
- 
- if (videoRef.current) {
- videoRef.current.srcObject = stream;
- videoRef.current.play();
- }
+    initModel();
+  }, []);
 
-
- setIsLoading(false);
- } catch (e) {
-
- console.error("CAMERA START ERROR:", e.name, e.message);
-
- setIsLoading(false); 
- }
- };
-
- startCamera();
-
- return () => {
- if (videoRef.current && videoRef.current.srcObject) {
- videoRef.current.srcObject.getTracks().forEach(track => track.stop());
- }
- };
-
- }, [runner]);
   // --------------------------
-  // Frame-by-frame inference
+  // 2. Start Camera
   // --------------------------
   useEffect(() => {
     if (!runner) return;
 
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 640 }, // Lower resolution helps FPS
+            height: { ideal: 480 } 
+          },
+          audio: false,
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play();
+            setIsLoading(false);
+          };
+        }
+      } catch (e) {
+        console.error("Camera Error:", e);
+        setIsLoading(false);
+      }
+    };
+
+    startCamera();
+
+   
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [runner]);
+
+  // --------------------------
+  // 3. Inference Loop
+  // --------------------------
+  useEffect(() => {
+    if (!runner || isLoading) return;
+
+    let requestAnimationFrameId;
+
     const processFrame = async () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
 
+     
+      if (!video || !canvas || video.readyState !== 4) {
+        requestAnimationFrameId = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
       const W = runner.inputWidth;
       const H = runner.inputHeight;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    
+      if (canvas.width !== video.videoWidth) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
 
+      
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Resize frame to model input size
+     
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = W;
       tempCanvas.height = H;
@@ -118,35 +115,41 @@ loadModel();
 
       const imageData = tctx.getImageData(0, 0, W, H);
 
-      const result = await runner.classify(imageData);
+    
+      try {
+        const result = await runner.classify(imageData);
 
-      // Clear canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (result?.results?.length > 0) {
+          result.results.forEach((det) => {
+            drawBoundingBox(ctx, det, canvas.width, canvas.height);
 
-      if (result?.results?.length > 0) {
-        result.results.forEach((det) => {
-          drawBoundingBox(ctx, det, canvas.width, canvas.height);
-
-          if (det.label === "urine_strip" && det.confidence > 0.6) {
-            sendToBackend(det);
-          }
-        });
+          
+            if (det.label === "urine_strip" && det.confidence > 0.6) {
+              
+              sendToBackend(det);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Inference error:", err);
       }
 
-      requestAnimationFrame(processFrame);
+      requestAnimationFrameId = requestAnimationFrame(processFrame);
     };
 
-    requestAnimationFrame(processFrame);
-  }, [runner]);
+    requestAnimationFrameId = requestAnimationFrame(processFrame);
+
+    return () => cancelAnimationFrame(requestAnimationFrameId);
+  }, [runner, isLoading]);
 
   // --------------------------
-  // Draw bounding box
+  // Helper: Draw Box
   // --------------------------
   const drawBoundingBox = (ctx, det, cw, ch) => {
-    ctx.strokeStyle = "lime";
-    ctx.lineWidth = 3;
-    ctx.font = "16px Arial";
-    ctx.fillStyle = "lime";
+    ctx.strokeStyle = "#00FF00";
+    ctx.lineWidth = 4;
+    ctx.font = "bold 18px Arial";
+    ctx.fillStyle = "#00FF00";
 
     const scaleX = cw / runner.inputWidth;
     const scaleY = ch / runner.inputHeight;
@@ -157,20 +160,20 @@ loadModel();
     const h = det.height * scaleY;
 
     ctx.strokeRect(x, y, w, h);
-    ctx.fillText(`${det.label} (${Math.round(det.confidence * 100)}%)`, x + 4, y - 6);
+    ctx.fillText(`${det.label} ${Math.round(det.confidence * 100)}%`, x, y - 10);
   };
 
-  // --------------------------
-  // Send detection to backend 
-  // --------------------------
   const sendToBackend = async (detection) => {
+  
+    if (window.isSending) return;
+    window.isSending = true;
+    setTimeout(() => { window.isSending = false; }, 2000); 
     try {
       const response = await fetch(backendURL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ detection }),
       });
-
       const data = await response.json();
       onResult && onResult(data);
     } catch (e) {
@@ -182,14 +185,25 @@ loadModel();
     <div className="bg-white p-4 rounded-2xl shadow-lg max-w-md mx-auto">
       <h4 className="font-semibold mb-3">Strip Analyzer</h4>
 
-      {isLoading ? (
-        <div className="text-center text-gray-500">Loading model & camera…</div>
-      ) : (
-        <>
-          <video ref={videoRef} className="hidden" />
-          <canvas ref={canvasRef} className="w-full rounded-xl border shadow" />
-        </>
+      {isLoading && (
+        <div className="text-center text-gray-500 py-10">
+          <p>Initializing Camera & Model...</p>
+        </div>
       )}
+
+     
+      <video 
+        ref={videoRef} 
+        className="hidden" 
+        playsInline 
+        muted 
+        autoPlay
+      />
+      
+      <canvas 
+        ref={canvasRef} 
+        className={`w-full rounded-xl border shadow ${isLoading ? 'hidden' : 'block'}`} 
+      />
     </div>
   );
 }
