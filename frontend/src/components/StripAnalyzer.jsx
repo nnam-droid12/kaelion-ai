@@ -24,7 +24,8 @@ export default function StripAnalyzer({ onResult }) {
         if (!window.EdgeImpulse) {
           await new Promise((resolve, reject) => {
             const script = document.createElement("script");
-            script.src = "/ei-wasm/edge-impulse-standalone.js"; 
+           
+            script.src = `/ei-wasm/edge-impulse-standalone.js?v=${new Date().getTime()}`;
             script.async = true;
             script.onload = () => {
             
