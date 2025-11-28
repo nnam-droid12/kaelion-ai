@@ -55,21 +55,41 @@ loadModel();
   // Start Camera
   // --------------------------
   useEffect(() => {
-    if (!runner) return;
+ if (!runner) return;
 
-    const startCamera = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-      videoRef.current.srcObject = stream;
-      videoRef.current.play();
-      setIsLoading(false);
-    };
+ const startCamera = async () => {
+ try {
 
-    startCamera();
-  }, [runner]);
+ const stream = await navigator.mediaDevices.getUserMedia({
+ video: { facingMode: "environment" },
+ audio: false,
+ });
+ 
+ 
+ if (videoRef.current) {
+ videoRef.current.srcObject = stream;
+ videoRef.current.play();
+ }
 
+
+ setIsLoading(false);
+ } catch (e) {
+
+ console.error("CAMERA START ERROR:", e.name, e.message);
+
+ setIsLoading(false); 
+ }
+ };
+
+ startCamera();
+
+ return () => {
+ if (videoRef.current && videoRef.current.srcObject) {
+ videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+ }
+ };
+
+ }, [runner]);
   // --------------------------
   // Frame-by-frame inference
   // --------------------------
