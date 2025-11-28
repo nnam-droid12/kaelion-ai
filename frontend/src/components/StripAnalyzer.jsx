@@ -6,74 +6,60 @@ export default function StripAnalyzer({ onResult }) {
   const [runner, setRunner] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  
+
   const backendURL = "https://kaelion-ai.onrender.com/analyze";
 
   // --------------------------
-  // 1. Load Model (Dynamic Import Strategy)
+  // 1. Load Edge Impulse Script & Model (The Safe Way)
   // --------------------------
   useEffect(() => {
-    const initModel = async () => {
+    const loadModel = async () => {
       try {
-        console.log("Attempting to load Edge Impulse module...");
-
-       
-        let EdgeImpulse = window.EdgeImpulse;
-
       
-        if (!EdgeImpulse) {
-            try {
-             
-                const module = await import(/* @vite-ignore */ "/ei-wasm/edge-impulse-standalone.js");
-                
-              
-                EdgeImpulse = module.default || module;
-                
-             
-                if (!EdgeImpulse && window.EdgeImpulse) {
-                    EdgeImpulse = window.EdgeImpulse;
-                }
-            } catch (importErr) {
-                console.warn("Dynamic import failed, falling back to script injection", importErr);
-            }
+        if (!window.EdgeImpulse) {
+          console.log("Injecting Edge Impulse script...");
+          
+          await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "/ei-wasm/edge-impulse-standalone.js";
+            script.async = true;
+            
+            script.onload = () => {
+            
+              if (window.EdgeImpulse) {
+                resolve();
+              } else {
+                reject(new Error("Script loaded, but window.EdgeImpulse is missing."));
+              }
+            };
+            
+            script.onerror = () => reject(new Error("Failed to load /ei-wasm/edge-impulse-standalone.js (404)"));
+            
+            document.body.appendChild(script);
+          });
         }
 
-     
-        if (!EdgeImpulse) {
-             await new Promise((resolve, reject) => {
-                const script = document.createElement("script");
-                script.src = "/ei-wasm/edge-impulse-standalone.js";
-                script.onload = () => {
-                    if (window.EdgeImpulse) resolve();
-                    else reject(new Error("Script loaded but EdgeImpulse object missing"));
-                };
-                script.onerror = reject;
-                document.body.appendChild(script);
-             });
-             EdgeImpulse = window.EdgeImpulse;
-        }
-
-        if (!EdgeImpulse) {
-            throw new Error("Could not load Edge Impulse library. Check file content.");
-        }
-
-        console.log("Library loaded. Initializing WASM...");
+    
+        console.log("Script ready. Loading WASM...");
+        const ei = window.EdgeImpulse;
         
-      
-        const mod = await EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
+     
+        const mod = await ei.load("/ei-wasm/edge-impulse-standalone.wasm");
         const r = await mod.createRunner();
         await r.init();
 
-        console.log("Runner initialized successfully!");
+        console.log("Runner initialized!");
         setRunner(r);
+        setIsLoading(false);
+
       } catch (e) {
         console.error("Initialization Error:", e);
-        setErrorMsg(`Error: ${e.message || "Failed to load model"}`);
+        setErrorMsg(`Load Error: ${e.message}`);
         setIsLoading(false);
       }
     };
 
-    initModel();
+    loadModel();
   }, []);
 
   // --------------------------
@@ -97,18 +83,18 @@ export default function StripAnalyzer({ onResult }) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
             videoRef.current.play();
-            setIsLoading(false);
           };
         }
       } catch (e) {
         console.error("Camera Error:", e);
-        setErrorMsg("Camera permission denied.");
+        setErrorMsg("Camera access denied.");
         setIsLoading(false);
       }
     };
 
     startCamera();
 
+    // Cleanup
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
@@ -120,7 +106,7 @@ export default function StripAnalyzer({ onResult }) {
   // 3. Inference Loop
   // --------------------------
   useEffect(() => {
-    if (!runner || isLoading) return;
+    if (!runner) return;
 
     let reqId;
     let lastSent = 0;
@@ -135,7 +121,8 @@ export default function StripAnalyzer({ onResult }) {
       }
 
       const ctx = canvas.getContext("2d");
-      
+
+    
       if (canvas.width !== video.videoWidth) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -143,6 +130,7 @@ export default function StripAnalyzer({ onResult }) {
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    
       const W = runner.inputWidth;
       const H = runner.inputHeight;
       
@@ -164,7 +152,7 @@ export default function StripAnalyzer({ onResult }) {
             if (det.label === "urine_strip" && det.confidence > 0.6) {
               const now = Date.now();
             
-              if (now - lastSent > 2500) { 
+              if (now - lastSent > 2000) { 
                 sendToBackend(det);
                 lastSent = now;
               }
@@ -180,7 +168,7 @@ export default function StripAnalyzer({ onResult }) {
 
     reqId = requestAnimationFrame(processFrame);
     return () => cancelAnimationFrame(reqId);
-  }, [runner, isLoading]);
+  }, [runner]);
 
   const drawBoundingBox = (ctx, det, cw, ch) => {
     ctx.strokeStyle = "#00FF00";
@@ -191,12 +179,16 @@ export default function StripAnalyzer({ onResult }) {
     const scaleX = cw / runner.inputWidth;
     const scaleY = ch / runner.inputHeight;
 
-    ctx.strokeRect(det.x * scaleX, det.y * scaleY, det.width * scaleX, det.height * scaleY);
-    ctx.fillText(`${det.label} ${Math.round(det.confidence * 100)}%`, det.x * scaleX, (det.y * scaleY) - 5);
+    const x = det.x * scaleX;
+    const y = det.y * scaleY;
+    const w = det.width * scaleX;
+    const h = det.height * scaleY;
+
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillText(`${det.label} ${Math.round(det.confidence * 100)}%`, x, y - 5);
   };
 
   const sendToBackend = async (detection) => {
-    console.log("Detected:", detection);
     try {
       const response = await fetch(backendURL, {
         method: "POST",
@@ -215,13 +207,17 @@ export default function StripAnalyzer({ onResult }) {
       <h4 className="font-semibold mb-3">Strip Analyzer</h4>
 
       {errorMsg ? (
-        <div className="bg-red-50 text-red-600 p-3 rounded text-sm mb-2">{errorMsg}</div>
+        <div className="bg-red-50 text-red-600 p-3 rounded mb-2 text-sm text-center">
+          {errorMsg}
+        </div>
       ) : isLoading && (
-        <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
-          <div className="text-blue-600 font-medium">Starting AI...</div>
+        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center rounded-xl">
+           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+           <p className="text-gray-600 text-sm">Loading Neural Network...</p>
         </div>
       )}
 
+    
       <video ref={videoRef} className="hidden" playsInline muted autoPlay />
       <canvas ref={canvasRef} className="w-full rounded-xl border bg-black min-h-[200px]" />
     </div>
