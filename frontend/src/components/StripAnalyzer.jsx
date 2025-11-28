@@ -11,30 +11,44 @@ export default function StripAnalyzer({ onResult }) {
   // Load Edge Impulse Model
   // --------------------------
  useEffect(() => {
-  const loadModel = async () => {
-    try {
-      // Dynamically load the JS file
-      await new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "/ei-wasm/edge-impulse-standalone.js";
-        script.onload = resolve;
-        script.onerror = reject;
-        document.body.appendChild(script);
-      });
+ const loadModel = async () => {
+try {
+await new Promise((resolve, reject) => {
+const script = document.createElement("script");
+script.src = "/ei-wasm/edge-impulse-standalone.js";
+ 
+script.onload = () => {
+if (window.EdgeImpulse && window.EdgeImpulse.load) {
+resolve();
+} else {
+console.warn("EdgeImpulse global not immediately available after script load.");
+resolve(); 
+}
+};
+script.onerror = reject;
+document.body.appendChild(script);
+});
 
-     
-      const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
-      const r = await mod.createRunner();
-      await r.init();
+if (!window.EdgeImpulse || !window.EdgeImpulse.load) {
+ throw new Error("window.EdgeImpulse not found after script load.");
+ }
+ 
 
-      setRunner(r);
-    } catch (e) {
-      console.error("EI Load Error:", e);
-    }
-  };
+ const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
+ const r = await mod.createRunner();
+ await r.init();
 
-  loadModel();
-}, []);
+ setRunner(r);
+ 
+} catch (e) {
+console.error("EI Load Error:", e);
+
+setIsLoading(false); 
+}
+};
+
+ loadModel();
+}, []); 
 
   // --------------------------
   // Start Camera
