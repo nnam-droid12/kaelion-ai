@@ -10,53 +10,46 @@ export default function StripAnalyzer({ onResult }) {
   const backendURL = "https://kaelion-ai.onrender.com/analyze";
 
   // --------------------------
-  // 1. Load Edge Impulse Script & Model (The Safe Way)
+  // 1. Load Edge Impulse (Raw Module Method)
   // --------------------------
   useEffect(() => {
     const loadModel = async () => {
-      try {
-      
-        if (!window.EdgeImpulse) {
-          console.log("Injecting Edge Impulse script...");
-          
-          await new Promise((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "/ei-wasm/edge-impulse-standalone.js";
-            script.async = true;
-            
-            script.onload = () => {
-            
-              if (window.EdgeImpulse) {
-                resolve();
-              } else {
-                reject(new Error("Script loaded, but window.EdgeImpulse is missing."));
-              }
-            };
-            
-            script.onerror = () => reject(new Error("Failed to load /ei-wasm/edge-impulse-standalone.js (404)"));
-            
-            document.body.appendChild(script);
-          });
-        }
+    
+      if (window.Module && window.Module.classifier) {
+         console.log("Module already loaded");
+         setRunner(window.Module);
+         setIsLoading(false);
+         return;
+      }
+
+      console.log("Setting up WASM environment...");
 
     
-        console.log("Script ready. Loading WASM...");
-        const ei = window.EdgeImpulse;
+      window.Module = {
+        onRuntimeInitialized: function() {
+          console.log("WASM Runtime Initialized!");
+          
         
+          setRunner(window.Module);
+          setIsLoading(false);
+        },
+        locateFile: function(path) {
+          
+          return "/ei-wasm/edge-impulse-standalone.wasm";
+        }
+      };
+
      
-        const mod = await ei.load("/ei-wasm/edge-impulse-standalone.wasm");
-        const r = await mod.createRunner();
-        await r.init();
-
-        console.log("Runner initialized!");
-        setRunner(r);
+      const script = document.createElement("script");
+      script.src = "/ei-wasm/edge-impulse-standalone.js";
+      script.async = true;
+      
+      script.onerror = () => {
+        setErrorMsg("Failed to load /ei-wasm/edge-impulse-standalone.js");
         setIsLoading(false);
+      };
 
-      } catch (e) {
-        console.error("Initialization Error:", e);
-        setErrorMsg(`Load Error: ${e.message}`);
-        setIsLoading(false);
-      }
+      document.body.appendChild(script);
     };
 
     loadModel();
@@ -94,7 +87,6 @@ export default function StripAnalyzer({ onResult }) {
 
     startCamera();
 
-    // Cleanup
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
@@ -122,7 +114,6 @@ export default function StripAnalyzer({ onResult }) {
 
       const ctx = canvas.getContext("2d");
 
-    
       if (canvas.width !== video.videoWidth) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -130,20 +121,42 @@ export default function StripAnalyzer({ onResult }) {
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    
-      const W = runner.inputWidth;
-      const H = runner.inputHeight;
       
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = W;
-      tempCanvas.height = H;
-      const tctx = tempCanvas.getContext("2d");
-      tctx.drawImage(video, 0, 0, W, H);
-
-      const imageData = tctx.getImageData(0, 0, W, H);
-
+      
       try {
-        const result = await runner.classify(imageData);
+        
+        const W = 96; 
+        const H = 96; 
+      
+        
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = W;
+        tempCanvas.height = H;
+        const tctx = tempCanvas.getContext("2d");
+        tctx.drawImage(video, 0, 0, W, H);
+
+        const imageData = tctx.getImageData(0, 0, W, H);
+        
+      
+        const features = [];
+        for (let i = 0; i < imageData.data.length; i += 4) {
+             const r = imageData.data[i];
+             const g = imageData.data[i + 1];
+             const b = imageData.data[i + 2];
+            
+             features.push((r << 16) | (g << 8) | b);
+        }
+
+      
+        
+        let result;
+        if (runner.classify) {
+            
+             result = await runner.classify(imageData);
+        } else if (runner.run_classifier) {
+            
+             console.warn("Raw classifier detected. Need buffer logic.");
+        }
 
         if (result?.results?.length > 0) {
           result.results.forEach((det) => {
@@ -151,7 +164,6 @@ export default function StripAnalyzer({ onResult }) {
 
             if (det.label === "urine_strip" && det.confidence > 0.6) {
               const now = Date.now();
-            
               if (now - lastSent > 2000) { 
                 sendToBackend(det);
                 lastSent = now;
@@ -160,7 +172,8 @@ export default function StripAnalyzer({ onResult }) {
           });
         }
       } catch (err) {
-        console.error(err);
+       
+        if (!err.message.includes("memory")) console.error(err);
       }
 
       reqId = requestAnimationFrame(processFrame);
@@ -171,21 +184,20 @@ export default function StripAnalyzer({ onResult }) {
   }, [runner]);
 
   const drawBoundingBox = (ctx, det, cw, ch) => {
+   
+    const inputW = runner.inputWidth || 96;
+    const inputH = runner.inputHeight || 96;
+
     ctx.strokeStyle = "#00FF00";
     ctx.lineWidth = 3;
     ctx.font = "bold 16px Arial";
     ctx.fillStyle = "#00FF00";
 
-    const scaleX = cw / runner.inputWidth;
-    const scaleY = ch / runner.inputHeight;
+    const scaleX = cw / inputW;
+    const scaleY = ch / inputH;
 
-    const x = det.x * scaleX;
-    const y = det.y * scaleY;
-    const w = det.width * scaleX;
-    const h = det.height * scaleY;
-
-    ctx.strokeRect(x, y, w, h);
-    ctx.fillText(`${det.label} ${Math.round(det.confidence * 100)}%`, x, y - 5);
+    ctx.strokeRect(det.x * scaleX, det.y * scaleY, det.width * scaleX, det.height * scaleY);
+    ctx.fillText(`${det.label} ${Math.round(det.confidence * 100)}%`, det.x * scaleX, (det.y * scaleY) - 5);
   };
 
   const sendToBackend = async (detection) => {
@@ -207,17 +219,14 @@ export default function StripAnalyzer({ onResult }) {
       <h4 className="font-semibold mb-3">Strip Analyzer</h4>
 
       {errorMsg ? (
-        <div className="bg-red-50 text-red-600 p-3 rounded mb-2 text-sm text-center">
-          {errorMsg}
-        </div>
+        <div className="bg-red-50 text-red-600 p-3 rounded mb-2 text-sm">{errorMsg}</div>
       ) : isLoading && (
-        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center rounded-xl">
-           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-           <p className="text-gray-600 text-sm">Loading Neural Network...</p>
+        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+           <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mb-2"></div>
+           <p className="text-gray-600 text-sm">Loading WASM...</p>
         </div>
       )}
 
-    
       <video ref={videoRef} className="hidden" playsInline muted autoPlay />
       <canvas ref={canvasRef} className="w-full rounded-xl border bg-black min-h-[200px]" />
     </div>
