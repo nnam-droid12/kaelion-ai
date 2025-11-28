@@ -7,43 +7,70 @@ export default function StripAnalyzer({ onResult }) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   
- 
+
   const [modelDims, setModelDims] = useState({ width: 96, height: 96 });
 
   const backendURL = "https://kaelion-ai.onrender.com/analyze";
 
   // --------------------------
-  // 1. Load Edge Impulse (Browser + SIMD Build)
+  // 1. Load Edge Impulse (SIMD / Factory Support)
   // --------------------------
   useEffect(() => {
     const loadModel = async () => {
       try {
-        console.log("Loading Edge Impulse (Browser SIMD)...");
+        console.log("Initializing Edge Impulse (SIMD)...");
 
-      
+       
+        const waitForGlobal = async () => {
+             return new Promise((resolve, reject) => {
+                 let count = 0;
+                 const interval = setInterval(() => {
+                     if (window.EdgeImpulse) {
+                         clearInterval(interval);
+                         resolve(window.EdgeImpulse);
+                     }
+                     count++;
+                     if (count > 20) {
+                         clearInterval(interval);
+                         reject(new Error("Timeout: window.EdgeImpulse not found"));
+                     }
+                 }, 100);
+             });
+        };
+
+    
         if (!window.EdgeImpulse) {
           await new Promise((resolve, reject) => {
             const script = document.createElement("script");
-           
-            script.src = `/ei-wasm/edge-impulse-standalone.js?v=${new Date().getTime()}`;
+       
+            script.src = `/ei-wasm/edge-impulse-standalone.js?v=${new Date().getTime()}`; 
             script.async = true;
-            script.onload = () => {
-            
-              if (window.EdgeImpulse) resolve();
-              else reject(new Error("Script loaded but window.EdgeImpulse is missing."));
-            };
-            script.onerror = () => reject(new Error("Failed to load script. Check public/ei-wasm/ folder."));
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Failed to load script file."));
             document.body.appendChild(script);
           });
         }
 
        
-        const ei = window.EdgeImpulse;
-        const mod = await ei.load("/ei-wasm/edge-impulse-standalone.wasm");
+        let eiFactory = await waitForGlobal();
+
+      
+        let eiModule;
+        if (typeof eiFactory === 'function') {
+            console.log("SIMD Factory detected. Initializing...");
+            eiModule = await eiFactory(); 
+        } else {
+            eiModule = eiFactory; 
+        }
+
+        if (!eiModule) throw new Error("Failed to initialize Edge Impulse module");
+
+     
+        const mod = await eiModule.load("/ei-wasm/edge-impulse-standalone.wasm");
         const r = await mod.createRunner();
         await r.init();
         
-        
+     
         const props = r.getProperties();
         console.log("Model Loaded. Input Size:", props.input_width, "x", props.input_height);
         
@@ -52,14 +79,9 @@ export default function StripAnalyzer({ onResult }) {
         setIsLoading(false);
 
       } catch (e) {
-        console.error("Model Load Error:", e);
-     
-        if (e.message && e.message.includes("compile")) {
-             setErrorMsg("Your device does not support WebAssembly SIMD. Please download the standard 'WebAssembly (browser)' build instead.");
-        } else {
-             setErrorMsg(e.message);
-        }
-        setIsLoading(false);
+        console.error("Setup Error:", e);
+        setErrorMsg(`Error: ${e.message}`);
+        setIsLoading(false); 
       }
     };
 
@@ -76,7 +98,7 @@ export default function StripAnalyzer({ onResult }) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            facingMode: "environment", 
+            facingMode: "environment",
             width: { ideal: 640 },
             height: { ideal: 480 }
           },
@@ -91,7 +113,7 @@ export default function StripAnalyzer({ onResult }) {
         }
       } catch (e) {
         console.error("Camera Error:", e);
-        setErrorMsg("Camera access denied or unavailable.");
+        setErrorMsg("Camera access denied.");
       }
     };
 
@@ -105,7 +127,7 @@ export default function StripAnalyzer({ onResult }) {
   }, [runner]);
 
   // --------------------------
-  // 3. Inference Loop (Detection)
+  // 3. Inference Loop (Object Detection)
   // --------------------------
   useEffect(() => {
     if (!runner) return;
@@ -124,53 +146,46 @@ export default function StripAnalyzer({ onResult }) {
 
       const ctx = canvas.getContext("2d");
       
-      
+     
       if (canvas.width !== video.videoWidth) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
       }
 
-     
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-     
+  
       const W = modelDims.width;
       const H = modelDims.height;
       
-   
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = W;
       tempCanvas.height = H;
       const tctx = tempCanvas.getContext("2d");
       tctx.drawImage(video, 0, 0, W, H);
 
-     
+   
       const imageData = tctx.getImageData(0, 0, W, H);
 
-     
+    
       const features = [];
       for (let i = 0; i < imageData.data.length; i += 4) {
         const r = imageData.data[i];
         const g = imageData.data[i + 1];
         const b = imageData.data[i + 2];
-       
         features.push((r << 16) | (g << 8) | b);
       }
 
       try {
-      
         const result = await runner.classify(features);
 
-       
+      
         if (result && result.type === "object-detection") {
            const boxes = result.bounding_boxes || [];
-           
            boxes.forEach((det) => {
-          
              if (det.value > 0.6) { 
                 drawBoundingBox(ctx, det, canvas.width, canvas.height);
 
-             
                 const now = Date.now();
                 if (now - lastSent > 2000 && det.label === "urine_strip") { 
                    sendToBackend(det);
@@ -181,7 +196,7 @@ export default function StripAnalyzer({ onResult }) {
         } 
 
       } catch (err) {
-      
+       
       }
 
       reqId = requestAnimationFrame(processFrame);
@@ -195,7 +210,6 @@ export default function StripAnalyzer({ onResult }) {
   // Helper: Draw Bounding Box
   // --------------------------
   const drawBoundingBox = (ctx, det, cw, ch) => {
- 
     const scaleX = cw / modelDims.width;
     const scaleY = ch / modelDims.height;
 
@@ -239,11 +253,10 @@ export default function StripAnalyzer({ onResult }) {
       ) : isLoading && (
         <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mb-2"></div>
-           <p className="text-gray-600 font-medium">Loading AI Model...</p>
+           <p className="text-gray-600 font-medium">Loading SIMD Model...</p>
         </div>
       )}
 
-      
       <video ref={videoRef} className="hidden" playsInline muted autoPlay />
       <canvas ref={canvasRef} className="w-full rounded-xl border bg-black min-h-[250px]" />
     </div>
