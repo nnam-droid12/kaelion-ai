@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* custom theme overrides */
+body {
+  background-color: #F7F9FC; /* light neutral background */
+  color: #0F172A; /* dark text */
+}
+.card {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
