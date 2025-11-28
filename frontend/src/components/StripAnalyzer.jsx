@@ -10,21 +10,31 @@ export default function StripAnalyzer({ onResult }) {
   // --------------------------
   // Load Edge Impulse Model
   // --------------------------
-  useEffect(() => {
-    const loadModel = async () => {
-      try {
-        // eslint-disable-next-line no-undef
-        const mod = await EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
-        const r = await mod.createRunner();
-        await r.init();
-        setRunner(r);
-      } catch (e) {
-        console.error("EI Load Error:", e);
-      }
-    };
+ useEffect(() => {
+  const loadModel = async () => {
+    try {
+      // Dynamically load the JS file
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "/ei-wasm/edge-impulse-standalone.js";
+        script.onload = resolve;
+        script.onerror = reject;
+        document.body.appendChild(script);
+      });
 
-    loadModel();
-  }, []);
+     
+      const mod = await window.EdgeImpulse.load("/ei-wasm/edge-impulse-standalone.wasm");
+      const r = await mod.createRunner();
+      await r.init();
+
+      setRunner(r);
+    } catch (e) {
+      console.error("EI Load Error:", e);
+    }
+  };
+
+  loadModel();
+}, []);
 
   // --------------------------
   // Start Camera
