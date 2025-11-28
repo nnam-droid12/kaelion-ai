@@ -4,17 +4,45 @@ import Header from "./components/Header";
 import CameraCard from "./components/CameraCard";
 import AnalyzerCard from "./components/AnalyzerCard";
 import DiagnosisCard from "./components/DiagnosisCard";
+import { diagnosePads } from "./api/eiApi";
 
 function App() {
   const camRef = useRef();
   const [captured, setCaptured] = useState(null);
   const [diagnosis, setDiagnosis] = useState(null);
+  const [refMap, setRefMap] = useState(null);
 
   const handleCapture = (img) => {
     setCaptured(img);
     setDiagnosis(null);
-    // TODO: run inference + diagnosis logic
-    // setDiagnosis([...]);
+  };
+
+  
+  const handleMappingUpdated = (mapping) => {
+    setRefMap(mapping);
+    console.log("Saved reference mapping:", mapping);
+  };
+
+  
+  const handleDiagnosisRequest = async ({ pads }) => {
+    if (!refMap) {
+      alert("No calibration found — please Calibrate the reference chart first.");
+      return;
+    }
+    try {
+      const res = await diagnosePads(pads, refMap);
+      if (res && res.diagnoses) {
+      
+        setDiagnosis(res.diagnoses);
+      } else {
+        setDiagnosis([{ analyte: "error", diagnosis: "No diagnoses returned", confidence: 0 }]);
+      }
+      return res;
+    } catch (err) {
+      console.error(err);
+      alert("Diagnosis API failed: " + (err.message || err));
+      return null;
+    }
   };
 
   return (
@@ -32,7 +60,11 @@ function App() {
             </div>
 
             <div className="lg:col-span-1">
-              <AnalyzerCard imageDataUrl={captured} />
+              <AnalyzerCard
+                imageDataUrl={captured}
+                onMappingUpdated={handleMappingUpdated}
+                onDiagnosis={handleDiagnosisRequest}
+              />
             </div>
 
             <div className="lg:col-span-1">
