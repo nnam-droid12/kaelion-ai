@@ -1675,6 +1675,7 @@ var tempI64;
 var ASM_CONSTS = {
   
 };
+function hardware_concurrency(){ return self.navigator.hardwareConcurrency; }
 function xnnLoadWasmModuleJS(code,offset,offset_end,invalid_function_index){ const tableOriginalSize = wasmTable.length; const binary = new Uint8Array(HEAPU8.slice(code + offset, code + offset_end)); try { var module = new WebAssembly.Module(binary); var instance = new WebAssembly.Instance(module, {env : {memory: wasmMemory}}); for (var symName in instance.exports) { var value = instance.exports[symName]; addFunction(value); } if (tableOriginalSize < wasmTable.length) { return tableOriginalSize; } return invalid_function_index; } catch(error) { console.log(error); return invalid_function_index; } }
 
 
@@ -6668,6 +6669,7 @@ var asmLibraryArg = {
   "fd_seek": _fd_seek,
   "fd_write": _fd_write,
   "getentropy": _getentropy,
+  "hardware_concurrency": hardware_concurrency,
   "setTempRet0": _setTempRet0,
   "xnnLoadWasmModuleJS": xnnLoadWasmModuleJS
 };
