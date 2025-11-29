@@ -1,296 +1,270 @@
-
 import React, { useEffect, useRef, useState } from "react";
 
+class EdgeImpulseClassifier {
+  constructor(module) {
+    this._module = module;
+    this._initialized = false;
+  }
 
+  init() {
+    return new Promise((resolve) => {
+      if (this._initialized) return resolve();
+      this._module.onRuntimeInitialized = () => {
+        this._initialized = true;
+        resolve();
+      };
+      if (this._module.calledRun) {
+        this._initialized = true;
+        resolve();
+      }
+    });
+  }
 
-export default function StripAnalyzer({ onResult /* optional callback when backend returns */ }) {
+  getProperties() {
+    return this._module.get_properties();
+  }
+
+  classify(rawData) {
+    if (!this._initialized) throw new Error("Module is not initialized");
+
+    const module = this._module;
+    const typedArray = new Float32Array(rawData);
+    const ptr = module._malloc(typedArray.length * 4);
+    module.HEAPU8.set(new Uint8Array(typedArray.buffer), ptr);
+
+    const ret = module.run_classifier(ptr, typedArray.length, false);
+    module._free(ptr);
+
+    if (ret.result !== 0) throw new Error("Classification failed");
+
+    let jsResult = { anomaly: ret.anomaly, results: [] };
+
+    for (let i = 0; i < ret.size(); i++) {
+      let c = ret.get(i);
+      jsResult.results.push({
+        label: c.label,
+        value: c.value,
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height
+      });
+      c.delete();
+    }
+
+    ret.delete();
+    return jsResult;
+  }
+}
+
+export default function StripAnalyzer({ onResult }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const tempCanvasRef = useRef(null);
-  const moduleRef = useRef(null);          
-  const modelPropsRef = useRef({ width: 96, height: 96 }); 
-  const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState(null);
 
+  const [classifier, setClassifier] = useState(null);
+  const [modelDims, setModelDims] = useState({ width: 96, height: 96 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const backendURL = "https://kaelion-ai.onrender.com/calibrate";
+  const backendURL = "https://kaelion-ai.onrender.com/analyze";
 
-  const CONF_THRESHOLD = 0.5; 
-  const SEND_COOLDOWN_MS = 1500; 
-
-  // -------------------------
-  // Helper: load EI raw JS/WASM runtime (if not already loaded)
-  // -------------------------
+  // ----------------------------
+  // LOAD FOMO WASM
+  // ----------------------------
   useEffect(() => {
-    let didCancel = false;
-    async function initModule() {
+    if (typeof window === "undefined") return; // SSR guard
+
+    async function loadWasm() {
       try {
-        if (window.Module && typeof window.Module.run_classifier === "function") {
-         
-          moduleRef.current = window.Module;
-        } else {
-         
-          window.Module = window.Module || {};
-          window.Module.locateFile = (path) => `/ei-wasm/${path}`;
-        
-          await new Promise((resolve, reject) => {
-            const s = document.createElement("script");
-            s.src = `/ei-wasm/edge-impulse-standalone.js?v=${Date.now()}`;
-            s.async = true;
-            s.onload = resolve;
-            s.onerror = (e) => reject(new Error("Failed to load Edge Impulse JS runtime"));
-            document.body.appendChild(s);
-          });
-       
-          const waitFor = (ms) => new Promise(r => setTimeout(r, ms));
-          for (let i = 0; i < 40; i++) {
-            if (window.Module && typeof window.Module.run_classifier === "function") break;
-            await waitFor(100);
-          }
-          if (!window.Module || typeof window.Module.run_classifier !== "function") {
-            throw new Error("Edge Impulse runtime did not expose run_classifier()");
-          }
-          moduleRef.current = window.Module;
-        }
+        window.Module = {
+          locateFile: () => "/ei-wasm/edge-impulse-standalone.wasm",
+        };
 
-       
-        if (moduleRef.current.onRuntimeInitialized) {
-        
-          await new Promise((resolve) => {
-            const m = moduleRef.current;
-            if (m.calledRun || m._runCalled) return resolve();
-            const prev = m.onRuntimeInitialized;
-            m.onRuntimeInitialized = function () {
-              try { prev && prev(); } catch {}
-              resolve();
-            };
-          });
-        }
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = `/ei-wasm/edge-impulse-standalone.js?v=${Date.now()}`;
+          script.onload = resolve;
+          script.onerror = () => reject("Failed to load WASM");
+          document.body.appendChild(script);
+        });
 
-       
-        try {
-          const props = moduleRef.current.get_properties();
-          if (props && props.input_width && props.input_height) {
-            modelPropsRef.current = { width: props.input_width, height: props.input_height };
-          }
-        } catch (err) {
-          console.warn("Could not read model properties, using fallback dims.", err);
-        }
+        const clf = new EdgeImpulseClassifier(window.Module);
+        await clf.init();
 
-        if (!didCancel) setIsReady(true);
+        const props = clf.getProperties();
+        setModelDims({ width: props.input_width, height: props.input_height });
+
+        setClassifier(clf);
+        setIsLoading(false);
       } catch (err) {
-        console.error("EI runtime load error:", err);
-        if (!didCancel) setError(err.message || String(err));
+        console.error(err);
+        setErrorMsg("Failed to load model");
+        setIsLoading(false);
       }
     }
 
-    initModule();
-    return () => { didCancel = true; };
+    loadWasm();
   }, []);
 
-  // -------------------------
-  // Start camera once runtime ready
-  // -------------------------
+  // ----------------------------
+  // START CAMERA
+  // ----------------------------
   useEffect(() => {
-    if (!isReady) return;
-    let mounted = true;
-    async function startCamera() {
+    if (!classifier) return;
+
+    async function startCam() {
       try {
-        const constraints = { video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (!mounted) return;
-        const v = videoRef.current;
-        v.srcObject = stream;
-        await v.play();
-      
-        if (!tempCanvasRef.current) {
-          const tc = document.createElement("canvas");
-          tempCanvasRef.current = tc;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => videoRef.current.play();
         }
-      } catch (e) {
-        console.error("Camera error:", e);
-        setError("Camera permission denied or no camera available.");
+      } catch (err) {
+        setErrorMsg("Camera blocked");
       }
     }
-    startCamera();
-    return () => {
-      mounted = false;
-      try {
-        const s = videoRef.current && videoRef.current.srcObject;
-        if (s && s.getTracks) s.getTracks().forEach(t => t.stop());
-      } catch {}
-    };
-  }, [isReady]);
 
-  // -------------------------
-  // Main inference loop (highly optimized)
-  // -------------------------
+    startCam();
+  }, [classifier]);
+
+  // ----------------------------
+  // MAIN FRAME LOOP
+  // ----------------------------
   useEffect(() => {
-    if (!isReady) return;
-    const module = moduleRef.current;
-    if (!module || typeof module.run_classifier !== "function") return;
+    if (!classifier) return;
 
-    let raf = null;
+    let req;
     let lastSent = 0;
 
+    const loop = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
 
-    const { width: modelW, height: modelH } = modelPropsRef.current;
-    const tempCanvas = tempCanvasRef.current;
-    tempCanvas.width = modelW;
-    tempCanvas.height = modelH;
-    const tctx = tempCanvas.getContext("2d");
-
-
-    let lastPtr = 0;
-    let lastSize = 0;
-
-    const process = async () => {
-      try {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || video.readyState < 2) {
-          raf = requestAnimationFrame(process);
-          return;
-        }
-
-      
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        }
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    
-        const minDim = Math.min(video.videoWidth, video.videoHeight);
-        const sx = Math.round((video.videoWidth - minDim) / 2);
-        const sy = Math.round((video.videoHeight - minDim) / 2);
-
-       
-        tctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, modelW, modelH);
-
-       
-        const imgData = tctx.getImageData(0, 0, modelW, modelH).data; 
-       
-        const rgbBytes = new Uint8Array(modelW * modelH * 3);
-        let p = 0;
-        for (let i = 0, n = imgData.length; i < n; i += 4) {
-          rgbBytes[p++] = imgData[i];     // R
-          rgbBytes[p++] = imgData[i + 1]; // G
-          rgbBytes[p++] = imgData[i + 2]; // B
-        }
-
-      
-        const numBytes = rgbBytes.length;
-        if (lastSize !== numBytes) {
-          if (lastPtr) module._free(lastPtr);
-          lastPtr = module._malloc(numBytes);
-          lastSize = numBytes;
-        }
-     
-        module.HEAPU8.set(rgbBytes, lastPtr);
-
-       
-        const ret = module.run_classifier(lastPtr, numBytes, 0);
-      
-        if (ret && typeof ret.size === "function" && ret.size() > 0) {
-          // draw markers for each detection
-          for (let i = 0; i < ret.size(); i++) {
-            const obj = ret.get(i);
-            
-            const label = obj.label ? obj.label : "obj";
-            const val = typeof obj.value === "number" ? obj.value : (obj.value && obj.value.toFixed ? obj.value : 0);
-            const x = typeof obj.x === "number" ? obj.x : 0;
-            const y = typeof obj.y === "number" ? obj.y : 0;
-           
-            const factor = minDim / modelW;
-            const cx = Math.round(sx + x * factor);
-            const cy = Math.round(sy + y * factor);
-
-        
-            if (val >= CONF_THRESHOLD) {
-            
-              drawMarker(ctx, cx, cy, label, val);
-
-            
-              const now = Date.now();
-              if (now - lastSent > SEND_COOLDOWN_MS) {
-                lastSent = now;
-               
-                const detection = { label, confidence: val, x: cx, y: cy };
-                
-                onResult && onResult({ detection });
-           
-                if (backendURL) {
-                  fetch(backendURL, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ detection }),
-                  }).catch(e => console.warn("backend post failed:", e));
-                }
-              }
-            }
-         
-            try { obj.delete && obj.delete(); } catch (e) {}
-          }
-        }
-        try { ret.delete && ret.delete(); } catch (e) {}
-
-      } catch (err) {
-        console.error("Processing error:", err);
-      } finally {
-        raf = requestAnimationFrame(process);
+      // 🔥 FIX: ensure DOM exists before using it
+      if (!video || !canvas) {
+        req = requestAnimationFrame(loop);
+        return;
       }
+
+      if (video.readyState !== 4) {
+        req = requestAnimationFrame(loop);
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+
+      // sync canvas to video safely
+      if (canvas.width !== video.videoWidth) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const minDim = Math.min(canvas.width, canvas.height);
+      const sx = (canvas.width - minDim) / 2;
+      const sy = (canvas.height - minDim) / 2;
+
+      const W = modelDims.width;
+      const H = modelDims.height;
+
+      const tmp = document.createElement("canvas");
+      tmp.width = W;
+      tmp.height = H;
+
+      const tctx = tmp.getContext("2d");
+      tctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, W, H);
+
+      const img = tctx.getImageData(0, 0, W, H);
+      const features = [];
+
+      for (let i = 0; i < img.data.length; i += 4) {
+        const r = img.data[i];
+        const g = img.data[i + 1];
+        const b = img.data[i + 2];
+        features.push((r << 16) | (g << 8) | b);
+      }
+
+      // run FOMO inference
+      const result = classifier.classify(features);
+
+      if (result.results?.length > 0) {
+        result.results.forEach(det => {
+          if (det.value > 0.5) {
+            drawCircle(ctx, det, minDim, sx, sy);
+
+            const now = Date.now();
+            if (now - lastSent > 2000 && det.label === "urine_strip") {
+              sendToBackend(det);
+              lastSent = now;
+            }
+          }
+        });
+      }
+
+      req = requestAnimationFrame(loop);
     };
 
-    raf = requestAnimationFrame(process);
+    req = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(req);
+  }, [classifier, modelDims]);
 
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-  
-      try { if (lastPtr) module._free(lastPtr); } catch (e) {}
-    };
-  }, [isReady, onResult]);
+  // ----------------------------
+  // DRAW FOMO MARKER (CIRCLE)
+  // ----------------------------
+  function drawCircle(ctx, det, cropSize, sx, sy) {
+    const factor = cropSize / modelDims.width;
+    const cx = det.x * factor + sx;
+    const cy = det.y * factor + sy;
 
-
-  const drawMarker = (ctx, cx, cy, label, val) => {
-    ctx.save();
     ctx.beginPath();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#00FF66";
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "lime";
     ctx.stroke();
-  
-    const text = `${label} ${(val * 100).toFixed(0)}%`;
-    ctx.font = "bold 14px Inter, Arial";
-    const tw = ctx.measureText(text).width;
-    const px = Math.max(6, cx - tw/2);
-    ctx.fillRect(px - 6, cy + 28, tw + 12, 22);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(text, px, cy + 44);
-    ctx.restore();
-  };
+
+    ctx.fillStyle = "lime";
+    ctx.font = "bold 16px Arial";
+    ctx.fillText(`${det.label} ${Math.round(det.value * 100)}%`, cx + 25, cy);
+  }
+
+  async function sendToBackend(det) {
+    try {
+      await fetch(backendURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detection: det }),
+      });
+      if (onResult) onResult({ detection: det });
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-lg">
+    <div className="bg-white p-4 rounded-2xl shadow-lg max-w-md mx-auto relative">
       <h4 className="font-semibold mb-3">Strip Analyzer</h4>
 
-      {error && <div className="text-red-500 mb-2">{error}</div>}
-      {!isReady ? (
-        <div className="text-sm text-gray-500">Loading model & runtime…</div>
-      ) : (
-        <>
-          <div className="relative rounded-xl overflow-hidden bg-black border" style={{ minHeight: 260 }}>
-            <video ref={videoRef} className="hidden" playsInline muted />
-            <canvas ref={canvasRef} className="w-full h-full block" />
-            <div style={{ position: "absolute", right: 10, top: 10, zIndex: 20 }}>
-              <div className="px-2 py-1 bg-white bg-opacity-80 rounded text-xs">FOMO - center detection</div>
-            </div>
+      {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
+
+      <div className="relative bg-black rounded-xl overflow-hidden min-h-[260px] border">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center text-white text-sm">
+            Loading FOMO...
           </div>
-          <p className="text-xs text-gray-500 mt-2">Center the strip inside the camera view for best results.</p>
-        </>
-      )}
+        )}
+
+        <video ref={videoRef} className="hidden" playsInline autoPlay muted />
+        <canvas ref={canvasRef} className="w-full h-full object-contain" />
+      </div>
+
+      <p className="text-xs text-gray-500 text-center mt-2">
+        Keep the strip centered for better detection.
+      </p>
     </div>
   );
 }
