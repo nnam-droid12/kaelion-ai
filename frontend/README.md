@@ -3,9 +3,6 @@
 > **Automating Urinalysis:** Detecting, analyzing, and diagnosing urine dipstick test strips using Edge AI, Computer Vision, and Colorimetry.
 
 
-# 🔴 LIVE VIDEO DEMO
-[![Watch on YouTube](https://img.youtube.com/vi/Of6aLeaTMEc/maxresdefault.jpg)](https://youtu.be/Of6aLeaTMEc)
-
 
 ---
 
@@ -14,6 +11,8 @@
 - **GitHub Repository:** [Source Code](https://github.com/nnam-droid12/kaelion-ai)
 - **Frontend URL.** [Frontend URL](https://kaelion-ai.vercel.app/)
 
+# 🔴 LIVE VIDEO DEMO
+[![Watch on YouTube](https://img.youtube.com/vi/Of6aLeaTMEc/maxresdefault.jpg)](https://youtu.be/Of6aLeaTMEc)
 ---
 
 ##  Table of Contents
