@@ -12,7 +12,7 @@
 - **Frontend URL.** [Frontend URL](https://kaelion-ai.vercel.app/)
 
 # 🔴 LIVE VIDEO DEMO
-[![Watch on YouTube](https://img.youtube.com/vi/Of6aLeaTMEc/maxresdefault.jpg)](https://youtu.be/Of6aLeaTMEc)
+[![Watch on YouTube now](https://img.youtube.com/vi/Of6aLeaTMEc/maxresdefault.jpg)](https://youtu.be/Of6aLeaTMEc)
 ---
 
 ##  Table of Contents
