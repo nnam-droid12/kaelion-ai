@@ -14,7 +14,7 @@
 ##  Project Links
 - **Live Project (Edge Impulse):** [View Public Project](https://studio.edgeimpulse.com/studio/821834)
 - **GitHub Repository:** [Source Code](https://github.com/nnam-droid12/kaelion-ai)
-- ** Frontend URL: ** [Frontend Link](https://kaelion-ai.vercel.app)
+- **Frontend URL:** [Frontend Link](https://kaelion-ai.vercel.app)
 
 ---
 
