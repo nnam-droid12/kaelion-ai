@@ -4,9 +4,8 @@
 
 
 # 🔴 LIVE VIDEO DEMO
+[![Watch on YouTube](https://img.youtube.com/vi/Of6aLeaTMEc/maxresdefault.jpg)](https://youtu.be/Of6aLeaTMEc)
 
-
-![ Click Here to Watch the Video on YouTube](https://youtu.be/Of6aLeaTMEc)
 
 ---
 
