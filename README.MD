@@ -4,6 +4,13 @@
 
 ---
 
+# 🔴 LIVE VIDEO DEMO
+
+![Video Thumbnail](https://usercdn.edgeimpulse.com/project821834/26ab975d25a54b60836f61ded658b9a864174616f73564d1bff48fecf1bfbf1d)
+
+### [▶️ Click Here to Watch the Video on YouTube](https://youtu.be/Of6aLeaTMEc)
+
+
 ##  Project Links
 - **Live Project (Edge Impulse):** [View Public Project](https://studio.edgeimpulse.com/studio/821834)
 - **GitHub Repository:** [Source Code](https://github.com/nnam-droid12/kaelion-ai)
