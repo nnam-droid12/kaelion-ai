@@ -5,7 +5,7 @@
 ---
 
 ##  Project Links
-- **Live Project (Edge Impulse):** [View Public Project](https://studio.edgeimpulse.com/public/821834/latest)
+- **Live Project (Edge Impulse):** [View Public Project](https://studio.edgeimpulse.com/studio/821834)
 - **GitHub Repository:** [Source Code](https://github.com/nnam-droid12/kaelion-ai)
 
 ---
@@ -220,7 +220,7 @@ This project successfully demonstrates that expensive, proprietary automated uri
 ## Repository and References
 
 - **GitHub Repository:** [Kaelion AI](https://github.com/nnam-droid12/kaelion-ai)
-- **Edge Impulse Project:** [Live Project](https://studio.edgeimpulse.com/public/821834/latest)
+- **Edge Impulse Project:** [Live Project](https://studio.edgeimpulse.com/studio/821834)
 
 ---
 
