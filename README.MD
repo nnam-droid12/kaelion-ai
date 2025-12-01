@@ -2,7 +2,6 @@
 
 > **Automating Urinalysis:** Detecting, analyzing, and diagnosing urine dipstick test strips using Edge AI, Computer Vision, and Colorimetry.
 
----
 
 # 🔴 LIVE VIDEO DEMO
 
@@ -10,11 +9,12 @@
 
 ### [▶️ Click Here to Watch the Video on YouTube](https://youtu.be/Of6aLeaTMEc)
 
+---
 
 ##  Project Links
 - **Live Project (Edge Impulse):** [View Public Project](https://studio.edgeimpulse.com/studio/821834)
 - **GitHub Repository:** [Source Code](https://github.com/nnam-droid12/kaelion-ai)
-- **Frontend URL:** [Frontend Link](https://kaelion-ai.vercel.app)
+- **Frontend URL.** [Frontend URL](https://kaelion-ai.vercel.app/)
 
 ---
 
@@ -81,7 +81,12 @@ A high-quality model starts with high-quality data. We curated a custom dataset 
 !(https://usercdn.edgeimpulse.com/project821834/de5670ff07857b98a269516e56f7a0bb2d7abf8d1eb4d69d906f73cd48e7f087)
 
 ### Labeling Strategy
-We utilized **AI-Assisted Labeling** within Edge Impulse to speed up the workflow, identifying two core classes: `Urine_Strip` and `Reference_Chart`.
+
+we utilized manual labeling approach which is shown in the GIF below
+![data-labeling-gif (1).gif](https://usercdn.edgeimpulse.com/project821834/ae58941d6c12f31bde7b878bd138142e01e214f4913ce0f50e350c3d7fe89f8a)
+
+
+We also utilized **AI-Assisted Labeling** within Edge Impulse to speed up the workflow, identifying two core classes: `Urine_Strip` and `Reference_Chart`.
 
 ![AI data labeling](https://usercdn.edgeimpulse.com/project821834/453426c751527ce91b3567375b09b3e48c9586815fed001e304c36b799a0b2e0)
 
